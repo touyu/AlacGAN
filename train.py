@@ -20,6 +20,9 @@ from data.eval import CreateDataLoader as val_loader
 from utils import create_logger, save_checkpoint, load_state, get_scheduler, AverageMeter, calculate_fid
 from models.standard import *
 
+from torchvision.utils import save_image
+import matplotlib.pyplot as plt
+
 parser = argparse.ArgumentParser(description='PyTorch Colorization Training')
 
 parser.add_argument('--config', default='experiments/origin/config.yaml')
@@ -227,6 +230,11 @@ def main():
 
         fake = netG(real_sim, hint, feat_sim)
 
+        save_training_images(real_sim[0], hint[0], fake[0], real_cim[0], i)
+
+        # save image
+        # save_image(fake[0], f'results/{i}.jpg')
+
         errd = netD(fake, feat_sim)
         errG = errd.mean() * config.advW * -1
         errG.backward(retain_graph=True)
@@ -244,6 +252,11 @@ def main():
         # (3) Report & 100 Batch checkpoint
         ############################
         curr_iter += 1
+
+
+        # Save images
+
+
 
         if curr_iter % config.print_freq == 0:
             tb_logger.add_scalar('VGG MSE Loss', contentLoss.item(), curr_iter)
@@ -271,23 +284,23 @@ def main():
                                     vutils.make_grid(fake.detach().mul(0.5).add(0.5), nrow=4),
                                     curr_iter)
 
-        if curr_iter % config.val_freq == 0:
-            fid, var = validate(netG, netI)
-            tb_logger.add_scalar('fid_val', fid, curr_iter)
-            tb_logger.add_scalar('fid_variance', var, curr_iter)
-            logger.info(f'fid: {fid:.3f} ({var})\t')
+        # if curr_iter % config.val_freq == 0:
+        #     fid, var = validate(netG, netI)
+        #     tb_logger.add_scalar('fid_val', fid, curr_iter)
+        #     tb_logger.add_scalar('fid_variance', var, curr_iter)
+        #     logger.info(f'fid: {fid:.3f} ({var})\t')
 
-            # remember best fid and save checkpoint
-            is_best = fid < best_fid
-            best_fid = min(fid, best_fid)
-            save_checkpoint({
-                'step': curr_iter - 1,
-                'state_dictG': netG.state_dict(),
-                'state_dictD': netD.state_dict(),
-                'best_fid': best_fid,
-                'optimizerG': optimizerG.state_dict(),
-                'optimizerD': optimizerD.state_dict(),
-            }, is_best, config.save_path + '/ckpt')
+        #     # remember best fid and save checkpoint
+        #     is_best = fid < best_fid
+        #     best_fid = min(fid, best_fid)
+        #     save_checkpoint({
+        #         'step': curr_iter - 1,
+        #         'state_dictG': netG.state_dict(),
+        #         'state_dictD': netD.state_dict(),
+        #         'best_fid': best_fid,
+        #         'optimizerG': optimizerG.state_dict(),
+        #         'optimizerD': optimizerD.state_dict(),
+        #     }, is_best, config.save_path + '/ckpt')
 
         end = time.time()
 
@@ -302,6 +315,26 @@ def validate(netG, netI):
         fids.append(fid)
     fid_value /= 3
     return fid_value, np.var(fids)
+
+def save_training_images(real_sim, hint, fake_cim, real_cim, num):
+    real_sim = real_sim.mul(0.5).add(0.5).permute(1, 2, 0).to('cpu').detach().numpy() 
+    fake_cim = fake_cim.mul(0.5).add(0.5).permute(1, 2, 0).to('cpu').detach().numpy()
+    real_cim = real_cim.mul(0.5).add(0.5).permute(1, 2, 0).to('cpu').detach().numpy()
+
+    r, c = 1, 3
+    gen_imgs = [real_sim, fake_cim, real_cim]
+    titles = ['Condition', 'Generated', 'Original']
+
+    fig, axs = plt.subplots(r, c)
+    for i in range(c):
+        axs[i].imshow(gen_imgs[i], cmap='gray')
+        axs[i].set_title(titles[i])
+        axs[i].axis('off')
+    fig.savefig(f"results/test/{num}.jpg")
+    plt.close()
+
+def save_concat_images(netG):
+    print("Save")
 
 if __name__ == '__main__':
     main()
